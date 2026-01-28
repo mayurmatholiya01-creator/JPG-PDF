@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StockPro Studio - Final Master</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+    <style>
+        /* BASE UI */
+        body { background: #E8E8ED; color: #1D1D1F; font-family: 'Inter', sans-serif; height: 100vh; overflow: hidden; }
+        .layout { display: grid; grid-template-columns: 320px 1fr; height: 100%; }
+        
+        .sidebar { 
+            background: #FFFFFF; border-right: 1px solid #D2D2D7; 
+            padding: 24px; display: flex; flex-direction: column; gap: 15px; 
+            box-shadow: 2px 0 10px rgba(0,0,0,0.02); z-index: 10;
+            height: 100%; overflow: hidden;
+        }
+
+        .main { 
+            background: #E8E8ED; padding: 40px; overflow-y: auto; 
+            display: flex; flex-direction: column; align-items: center; gap: 30px;
+        }
+
+        .drop-zone { 
+            border: 1px dashed #86868B; border-radius: 8px; padding: 20px; 
+            text-align: center; cursor: pointer; transition: all 0.2s ease; background: #FAFAFC;
+        }
+        .drop-zone:hover { border-color: #0071E3; background: #F0F8FF; }
+        .drop-zone.active { border-color: #0071E3; border-style: solid; background: #E8F2FF; }
+        
+        h1 { font-family: 'Playfair Display', serif; letter-spacing: -0.5px; }
+
+        .btn-primary { 
+            background: #1D1D1F; color: #FFF; border: none; padding: 14px; 
+            border-radius: 8px; font-size: 13px; font-weight: 500; width: 100%; 
+            cursor: pointer; transition: 0.2s; 
+        }
+        .btn-primary:hover { background: #333; transform: scale(1.01); }
+        .btn-primary:disabled { background: #D2D2D7; color: #86868B; cursor: not-allowed; transform: none; }
+
+        /* --- FILENAME INPUT STYLES --- */
+        .filename-input {
+            width: 100%; padding: 12px; border: 1px solid #D2D2D7;
+            border-radius: 6px; font-size: 12px; font-weight: 600; color: #1D1D1F;
+            outline: none; transition: all 0.2s; text-transform: uppercase;
+            background: #FAFAFC;
+        }
+        .filename-input:focus { border-color: #0071E3; background: #FFF; }
+        .filename-input::placeholder { color: #86868B; font-weight: 400; }
+        
+        /* Error State (Red Glow + Shake) */
+        .filename-input.error { 
+            border-color: #FF3B30; background: #FFF2F2; 
+            animation: shake 0.4s ease-in-out;
+        }
+        @keyframes shake { 
+            0%, 100% { transform: translateX(0); } 
+            25% { transform: translateX(-4px); } 
+            75% { transform: translateX(4px); } 
+        }
+
+        /* --- PREVIEW CARDS --- */
+        .page-preview {
+            background: #FDFBF7; width: 100%; max-width: 650px; 
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08); border-radius: 2px; padding: 15px; position: relative;
+            transition: all 0.3s ease;
+        }
+        .page-preview.hidden-item { display: none; }
+
+        .preview-img-container {
+            width: 100%; background: #F0F0F0; cursor: pointer; position: relative;
+            display: flex; justify-content: center; overflow: hidden;
+            border: 2px solid transparent; transition: border-color 0.2s;
+        }
+        .preview-img-container.drag-active { border-color: #0071E3; background: #E1F0FF; }
+        .preview-img-container:hover .overlay { opacity: 1; }
+        .preview-img { width: 100%; height: auto; display: block; }
+        .overlay {
+            position: absolute; top:0; left:0; right:0; bottom:0;
+            background: rgba(0,0,0,0.5); color: white; display: flex; align-items: center; justify-content: center;
+            font-size: 12px; font-weight: 600; opacity: 0; transition: 0.2s; pointer-events: none; 
+        }
+
+        .preview-line { height: 1px; background: #BE963C; margin: 15px 10px; opacity: 0.8; }
+
+        .meta-row { display: flex; justify-content: space-between; align-items: flex-start; padding: 0 15px; margin-top: 10px; }
+        .left-col { flex: 1; }
+        .right-col { display: flex; flex-direction: column; align-items: center; margin-top: -2px; min-width: 60px; }
+
+        .editable { border: 1px dashed transparent; transition: 0.2s; cursor: text; }
+        .editable:hover, .editable:focus { border-color: #0071E3; background: rgba(0, 113, 227, 0.05); outline: none; padding: 0 4px; border-radius: 4px; }
+
+        .design-name { font-family: 'Times New Roman', serif; font-weight: bold; font-size: 22px; color: #1C1C1E; text-transform: uppercase; letter-spacing: 1px; }
+        .details-text { font-family: 'Helvetica', sans-serif; font-size: 10px; color: #6E6E73; text-transform: uppercase; margin-top: 6px; letter-spacing: 0.5px; }
+        .qty-num { font-family: 'Helvetica', sans-serif; font-weight: bold; font-size: 26px; color: #1C1C1E; line-height: 1; }
+        .qty-label { font-family: 'Helvetica', sans-serif; font-size: 7px; color: #BE963C; letter-spacing: 2px; margin-top: 4px; text-align: center; }
+        
+        .warning-badge {
+            background: #FF3B30; color: white; font-size: 10px; padding: 2px 8px; 
+            border-radius: 10px; position: absolute; top: -10px; right: -10px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2); z-index: 5;
+        }
+
+        .toggle-container {
+            display: flex; justify-content: space-between; align-items: center;
+            background: #F5F5F7; padding: 8px 12px; border-radius: 6px;
+            font-size: 11px; font-weight: 600; color: #424245; cursor: pointer; user-select: none;
+        }
+        .toggle-switch { width: 30px; height: 16px; background: #D2D2D7; border-radius: 10px; position: relative; transition: 0.2s; }
+        .toggle-switch.on { background: #1D1D1F; }
+        .toggle-knob { width: 12px; height: 12px; background: white; border-radius: 50%; position: absolute; top: 2px; left: 2px; transition: 0.2s; }
+        .toggle-switch.on .toggle-knob { left: 16px; }
+
+        /* SUGGESTION BOX */
+        .suggestion-section {
+            flex: 1; overflow-y: auto; border-top: 1px solid #E5E5E5; padding-top: 10px; display: none;
+        }
+        .suggestion-card {
+            background: #FFF9E6; border: 1px solid #F5E0B5; border-radius: 6px; 
+            padding: 10px; margin-bottom: 8px; font-size: 11px;
+        }
+        .suggestion-title { font-weight: 600; color: #8F6B00; margin-bottom: 4px; }
+        .suggestion-match { color: #333; margin-bottom: 6px; font-style: italic; }
+        .fix-btn {
+            background: #BE963C; color: white; border: none; padding: 4px 10px;
+            border-radius: 4px; font-size: 10px; font-weight: bold; cursor: pointer; width: 100%;
+        }
+        .fix-btn:hover { background: #A48130; }
+
+        .suggestion-section::-webkit-scrollbar { width: 4px; }
+        .suggestion-section::-webkit-scrollbar-thumb { background: #D2D2D7; border-radius: 2px; }
+
+    </style>
+</head>
+<body>
+
+    <div class="layout">
+        <div class="sidebar">
+            <div>
+                <h1 class="text-2xl text-black">StockPro <span class="text-stone-400 text-lg">Studio</span></h1>
+                <p class="text-[11px] text-gray-500 mt-1">ULTIMATE EDITION</p>
+            </div>
+            
+            <div class="drop-zone" id="folderZone" onclick="document.getElementById('folderInput').click()">
+                <span class="text-[11px] font-semibold text-gray-600 tracking-wide" id="folderText">1. SELECT ROOT FOLDER</span>
+                <input type="file" id="folderInput" webkitdirectory directory multiple class="hidden">
+            </div>
+
+            <div class="drop-zone" id="excelZone" onclick="document.getElementById('excelInput').click()">
+                <span class="text-[11px] font-semibold text-gray-600 tracking-wide" id="excelText">2. SELECT EXCEL</span>
+                <input type="file" id="excelInput" accept=".xlsx, .xls" class="hidden">
+            </div>
+
+            <div class="toggle-container" onclick="toggleMissingFilter()">
+                <span>SHOW MISSING ONLY</span>
+                <div class="toggle-switch" id="missingToggleUi"><div class="toggle-knob"></div></div>
+            </div>
+
+            <div class="flex justify-between text-[11px] text-gray-500 mt-2"><span>PAGES:</span> <b id="foundItems" class="text-black">0</b></div>
+
+            <div class="suggestion-section" id="suggestionContainer">
+                <p class="text-[10px] font-bold text-black mb-2 sticky top-0 bg-white">MAYBE YOU MEANT?</p>
+                <div id="suggestionList"></div>
+            </div>
+            
+            <div class="mt-auto">
+                <div class="mb-3">
+                    <label class="text-[10px] font-bold text-gray-400 block mb-1">CATALOG FILENAME</label>
+                    <input type="text" id="pdfNameInput" placeholder="ENTER CLIENT NAME" class="filename-input" oninput="this.value = this.value.toUpperCase()">
+                </div>
+
+                <button id="generateBtn" onclick="createPDF()" disabled class="btn-primary">Export PDF</button>
+                <p id="statusMsg" class="text-center text-[10px] text-gray-400 mt-3">Waiting for files...</p>
+            </div>
+        </div>
+
+        <div class="main" id="mainContainer">
+            <div class="text-center text-gray-400 text-sm mt-40">
+                Upload Excel & Images to begin.
+            </div>
+        </div>
+    </div>
+
+    <input type="file" id="manualImgInput" accept="image/*" class="hidden">
+
+    <script>
+        let imageStore = []; 
+        let finalData = [];
+        let activeEditIndex = -1;
+        let isMissingFilterOn = false;
+
+        const folderInput = document.getElementById('folderInput');
+        const excelInput = document.getElementById('excelInput');
+        const manualImgInput = document.getElementById('manualImgInput');
+        const generateBtn = document.getElementById('generateBtn');
+        const statusMsg = document.getElementById('statusMsg');
+        const mainContainer = document.getElementById('mainContainer');
+        const pdfNameInput = document.getElementById('pdfNameInput');
+
+        window.addEventListener('beforeunload', function (e) {
+            if (finalData.length > 0) { e.preventDefault(); e.returnValue = ''; }
+        });
+
+        // --- 1. INDEXING ---
+        folderInput.addEventListener('change', (e) => {
+            const files = e.target.files;
+            if (files.length === 0) return;
+            statusMsg.innerText = "Indexing...";
+            document.getElementById('folderZone').classList.add('active');
+            
+            setTimeout(() => {
+                imageStore = [];
+                for (let file of files) {
+                    if (file.name.match(/\.(jpg|jpeg|png|webp)$/i)) {
+                        let pathParts = file.webkitRelativePath.split('/');
+                        let folderName = pathParts.length > 1 ? pathParts[pathParts.length - 2].toLowerCase() : "root";
+                        imageStore.push({
+                            name: file.name,
+                            cleanName: file.name.toLowerCase().replace(/[^a-z0-9]/g, ''),
+                            folder: folderName,
+                            cleanFolder: folderName.replace(/[^a-z0-9]/g, ''),
+                            file: file
+                        });
+                    }
+                }
+                document.getElementById('folderText').innerText = `Images (${imageStore.length})`;
+                if(finalData.length > 0) runMatcher();
+                statusMsg.innerText = "Images Ready";
+            }, 100);
+        });
+
+        // --- 2. PARSING ---
+        excelInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            statusMsg.innerText = "Parsing Excel...";
+            document.getElementById('excelZone').classList.add('active');
+
+            const reader = new FileReader();
+            reader.onload = (evt) => {
+                const workbook = XLSX.read(new Uint8Array(evt.target.result), {type: 'array'});
+                const sheet = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], {header: 1, defval: ""});
+
+                let col = { design: -1, size: -1, qty: -1, finish: -1 };
+                for(let i=0; i<Math.min(sheet.length, 20); i++) {
+                    const row = sheet[i].map(x => String(x).toLowerCase());
+                    if(row.some(c => c.includes('design') || c.includes('particular'))) {
+                        col.design = row.findIndex(c => c.includes('design') || c.includes('particular'));
+                        col.size = row.findIndex(c => c.includes('size')); 
+                        col.qty = row.findIndex(c => c.includes('box') || c.includes('qty'));
+                        col.finish = row.findIndex(c => c.includes('surface') || c.includes('finish'));
+                        break;
+                    }
+                }
+                if(col.design === -1) { alert("Header missing!"); return; }
+
+                finalData = [];
+                for(let i=0; i<sheet.length; i++) {
+                    const row = sheet[i];
+                    if(!row || !row[col.design]) continue;
+                    let dName = String(row[col.design]).trim();
+                    if(dName.toLowerCase().includes('design')) continue;
+
+                    finalData.push({
+                        design: dName,
+                        cleanDesign: dName.toLowerCase().replace(/[^a-z0-9]/g, ''),
+                        size: col.size > -1 ? String(row[col.size]).trim() : "",
+                        cleanSize: col.size > -1 ? String(row[col.size]).toLowerCase().replace(/[^a-z0-9]/g, '') : "unknown",
+                        finish: col.finish > -1 ? String(row[col.finish]).trim() : "",
+                        qty: col.qty > -1 ? row[col.qty] : "",
+                        matchedFile: null,
+                        blobUrl: null
+                    });
+                }
+                document.getElementById('excelText').innerText = `Data (${finalData.length})`;
+                runMatcher();
+            };
+            reader.readAsArrayBuffer(file);
+        });
+
+        // --- 3. MATCHER ---
+        function runMatcher() {
+            if (finalData.length === 0) return;
+            statusMsg.innerText = "Smart Searching...";
+            mainContainer.innerHTML = "";
+            let suggestions = [];
+
+            if (imageStore.length > 0) {
+                const allFolders = [...new Set(imageStore.map(img => img.cleanFolder))];
+
+                finalData.forEach((item, index) => {
+                    if(item.matchedFile) return;
+
+                    let bestMatch = null;
+                    const threshold = 3; 
+
+                    let searchFolders = [item.cleanSize]; 
+                    const neighborFolders = sortFoldersByDistance(allFolders, item.cleanSize);
+                    searchFolders = [...searchFolders, ...neighborFolders.filter(f => f !== item.cleanSize)];
+
+                    for (let folderName of searchFolders) {
+                        let folderImages = imageStore.filter(img => img.cleanFolder === folderName);
+                        if (folderImages.length === 0) continue;
+
+                        for (let img of folderImages) {
+                            if (img.cleanName.includes(item.cleanDesign)) { bestMatch = img.file; break; }
+                        }
+                        if (!bestMatch) {
+                            bestMatch = fuzzySearchInList(folderImages, item.cleanDesign, item.cleanSize, threshold);
+                        }
+                        if (bestMatch) break; 
+                    }
+
+                    if (!bestMatch) {
+                        const looseThreshold = 8;
+                        const topFolders = searchFolders.slice(0, 2); 
+                        for(let folderName of topFolders) {
+                            let folderImages = imageStore.filter(img => img.cleanFolder === folderName);
+                            let potential = fuzzySearchInList(folderImages, item.cleanDesign, item.cleanSize, looseThreshold);
+                            if (potential) {
+                                let cleanDisplayName = potential.name.replace(/\.[^/.]+$/, ""); 
+                                suggestions.push({
+                                    index: index,
+                                    currentName: item.design,
+                                    suggestedFile: potential,
+                                    suggestedName: cleanDisplayName
+                                });
+                                break; 
+                            }
+                        }
+                    }
+
+                    item.matchedFile = bestMatch;
+                });
+            }
+            renderGrid();
+            renderSuggestions(suggestions);
+        }
+
+        // --- UI RENDERERS ---
+        function renderSuggestions(list) {
+            const container = document.getElementById('suggestionContainer');
+            const listDiv = document.getElementById('suggestionList');
+            listDiv.innerHTML = "";
+            if (list.length === 0) { container.style.display = 'none'; return; }
+
+            container.style.display = 'block';
+            list.forEach(sug => {
+                const div = document.createElement('div');
+                div.className = "suggestion-card";
+                div.innerHTML = `
+                    <div class="suggestion-title">Missing: "${sug.currentName}"</div>
+                    <div class="suggestion-match">Found: "${sug.suggestedName}"?</div>
+                    <button class="fix-btn">FIX & ASSIGN</button>
+                `;
+                div.querySelector('button').onclick = () => applySuggestion(sug.index, sug.suggestedName, sug.suggestedFile);
+                listDiv.appendChild(div);
+            });
+        }
+
+        function applySuggestion(index, newName, fileObj) {
+            finalData[index].design = newName;
+            finalData[index].matchedFile = fileObj;
+            finalData[index].blobUrl = URL.createObjectURL(fileObj);
+
+            const card = document.getElementById(`card-${index}`);
+            if(card) {
+                const nameDiv = card.querySelector('.design-name');
+                if(nameDiv) nameDiv.innerText = newName;
+                updateSingleCard(index, fileObj);
+            }
+            runMatcher();
+        }
+
+        function renderGrid() {
+            mainContainer.innerHTML = "";
+            finalData.forEach((item, index) => {
+                const div = document.createElement('div');
+                div.className = "page-preview";
+                div.id = `card-${index}`; 
+                div.dataset.hasImage = item.matchedFile ? "true" : "false";
+                div.innerHTML = getCardHTML(item, index);
+                mainContainer.appendChild(div);
+            });
+            document.getElementById('foundItems').innerText = finalData.length;
+            generateBtn.disabled = false;
+            statusMsg.innerText = "Ready";
+            applyMissingFilter();
+        }
+
+        function getCardHTML(item, index) {
+            let imgHtml, warningHtml = "";
+            if (item.matchedFile) {
+                const url = item.blobUrl || URL.createObjectURL(item.matchedFile);
+                item.blobUrl = url;
+                imgHtml = `<img src="${url}" class="preview-img">`;
+            } else {
+                imgHtml = `<div style="height:200px; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#999; pointer-events:none;">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                            <span style="font-size:10px; margin-top:5px;">CLICK OR DROP IMAGE</span>
+                           </div>`;
+                warningHtml = `<div class="warning-badge" id="warn-${index}">MISSING</div>`;
+            }
+
+            return `
+                ${warningHtml}
+                <div class="preview-img-container" id="imgBox-${index}"
+                     onclick="triggerImageUpload(${index})"
+                     ondragover="handleDragOver(event)"
+                     ondragleave="handleDragLeave(event)"
+                     ondrop="handleDrop(event, ${index})">
+                    ${imgHtml}
+                    <div class="overlay">CHANGE IMAGE</div>
+                </div>
+                <div class="preview-line"></div>
+                <div class="meta-row">
+                    <div class="left-col">
+                        <div class="design-name editable" contenteditable="true" onblur="updateData(${index}, 'design', this.innerText)">${item.design}</div>
+                        <div class="details-text editable" contenteditable="true" onblur="updateData(${index}, 'details', this.innerText)">
+                            ${item.size} ${item.finish ? ' • ' + item.finish : ''}
+                        </div>
+                    </div>
+                    <div class="right-col">
+                        ${item.qty ? `<div class="qty-num editable" contenteditable="true" onblur="updateData(${index}, 'qty', this.innerText)">${item.qty}</div><div class="qty-label">BOXES</div>` : ''}
+                    </div>
+                </div>
+                <div style="font-size:9px; color:#ccc; position:absolute; bottom:5px; left:15px;">Page ${index + 1}</div>
+            `;
+        }
+
+        // --- UTILS ---
+        function getDimensions(str) {
+            const matches = str.match(/(\d+)/g);
+            if (matches && matches.length >= 2) {
+                const nums = matches.map(Number).sort((a,b) => b-a);
+                return { w: nums[0], h: nums[1] }; 
+            }
+            return null;
+        }
+
+        function sortFoldersByDistance(folderList, targetSizeStr) {
+            const targetDims = getDimensions(targetSizeStr);
+            if (!targetDims) return folderList;
+
+            return folderList.sort((a, b) => {
+                const dimsA = getDimensions(a);
+                const dimsB = getDimensions(b);
+                if (!dimsA) return 1;
+                if (!dimsB) return -1;
+                const distA = Math.abs(targetDims.w - dimsA.w) + Math.abs(targetDims.h - dimsA.h);
+                const distB = Math.abs(targetDims.w - dimsB.w) + Math.abs(targetDims.h - dimsB.h);
+                return distA - distB;
+            });
+        }
+
+        function fuzzySearchInList(list, designName, sizeToRemove, threshold) {
+            let bestMatch = null;
+            let minDistance = Infinity;
+            for (let img of list) {
+                let nameOnly = img.cleanName;
+                if (sizeToRemove && nameOnly.includes(sizeToRemove)) nameOnly = nameOnly.replace(sizeToRemove, '');
+                else nameOnly = nameOnly.replace(/[0-9]+x[0-9]+/g, '');
+                
+                const d = levenshtein(designName, nameOnly);
+                if (d <= threshold && d < minDistance) { minDistance = d; bestMatch = img.file; }
+            }
+            return bestMatch;
+        }
+
+        function levenshtein(a, b) {
+            const matrix = [];
+            for (let i = 0; i <= b.length; i++) matrix[i] = [i];
+            for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
+            for (let i = 1; i <= b.length; i++) {
+                for (let j = 1; j <= a.length; j++) {
+                    if (b.charAt(i - 1) == a.charAt(j - 1)) matrix[i][j] = matrix[i - 1][j - 1];
+                    else matrix[i][j] = Math.min(matrix[i - 1][j - 1] + 1, Math.min(matrix[i][j - 1] + 1, matrix[i - 1][j] + 1));
+                }
+            }
+            return matrix[b.length][a.length];
+        }
+
+        function toggleMissingFilter() {
+            isMissingFilterOn = !isMissingFilterOn;
+            document.getElementById('missingToggleUi').classList.toggle('on');
+            applyMissingFilter();
+        }
+
+        function applyMissingFilter() {
+            const cards = document.querySelectorAll('.page-preview');
+            cards.forEach(card => {
+                if (isMissingFilterOn) {
+                    if (card.dataset.hasImage === "false") card.classList.remove('hidden-item');
+                    else card.classList.add('hidden-item');
+                } else {
+                    card.classList.remove('hidden-item');
+                }
+            });
+        }
+
+        function handleDragOver(e) { e.preventDefault(); e.currentTarget.classList.add('drag-active'); }
+        function handleDragLeave(e) { e.currentTarget.classList.remove('drag-active'); }
+        function handleDrop(e, index) {
+            e.preventDefault(); e.currentTarget.classList.remove('drag-active');
+            if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                const file = e.dataTransfer.files[0];
+                if(file.type.startsWith('image/')) updateSingleCard(index, file);
+            }
+        }
+        function triggerImageUpload(index) { activeEditIndex = index; manualImgInput.click(); }
+        manualImgInput.addEventListener('change', (e) => {
+            if (activeEditIndex === -1 || e.target.files.length === 0) return;
+            updateSingleCard(activeEditIndex, e.target.files[0]);
+            manualImgInput.value = '';
+        });
+
+        function updateSingleCard(index, file) {
+            finalData[index].matchedFile = file;
+            finalData[index].blobUrl = URL.createObjectURL(file);
+            const imgBox = document.getElementById(`imgBox-${index}`);
+            const warnBadge = document.getElementById(`warn-${index}`);
+            const card = document.getElementById(`card-${index}`);
+            if(imgBox) imgBox.innerHTML = `<img src="${finalData[index].blobUrl}" class="preview-img"><div class="overlay">CHANGE IMAGE</div>`;
+            if(warnBadge) warnBadge.style.display = 'none';
+            if(card) card.dataset.hasImage = "true";
+        }
+
+        window.updateData = function(index, field, value) {
+            value = value.trim();
+            if(field === 'design') finalData[index].design = value;
+            if(field === 'qty') finalData[index].qty = value;
+            if(field === 'details') { finalData[index].size = value; finalData[index].finish = ""; }
+        };
+
+        function readFileData(file) {
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const img = new Image();
+                    img.onload = () => resolve({ data: e.target.result, ratio: img.width / img.height });
+                    img.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
+        // --- PDF ENGINE ---
+        async function createPDF() {
+            // 1. VALIDATE FILENAME FIRST
+            const nameValue = pdfNameInput.value.trim();
+            if (!nameValue) {
+                pdfNameInput.classList.add('error');
+                pdfNameInput.focus();
+                // Remove error class after animation
+                setTimeout(() => pdfNameInput.classList.remove('error'), 500);
+                return; // STOP EXECUTION
+            }
+            pdfNameInput.classList.remove('error');
+
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            doc.deletePage(1);
+            generateBtn.disabled = true;
+            statusMsg.innerText = "Generating PDF...";
+            const pageWidth = 210, textBarHeight = 28, imgMargin = 6, lineGap = 4, linePinpoint = 10;
+            const cPearl = [253, 251, 247], cCharcoal = [28, 28, 30], cGold = [190, 150, 60], cGrey = [110, 110, 115];
+
+            for (let i = 0; i < finalData.length; i++) {
+                const item = finalData[i];
+                let imgHeight = 100, fileObj = null;
+                const displayWidth = pageWidth - (imgMargin * 2);
+                if (item.matchedFile) {
+                    try { fileObj = await readFileData(item.matchedFile); imgHeight = displayWidth / fileObj.ratio; } catch(e) {}
+                }
+                const totalPageHeight = imgMargin + imgHeight + lineGap + textBarHeight;
+                doc.addPage([pageWidth, totalPageHeight], (pageWidth > totalPageHeight) ? 'l' : 'p');
+                doc.setFillColor(...cPearl); doc.rect(0, 0, pageWidth, totalPageHeight, 'F');
+                
+                if (fileObj) { 
+                    // MAX QUALITY: 'NONE' for Pass-Through
+                    doc.addImage(fileObj.data, 'JPEG', imgMargin, imgMargin, displayWidth, imgHeight, null, 'NONE'); 
+                }
+                else { 
+                    doc.setFillColor(240, 240, 240); doc.rect(imgMargin, imgMargin, displayWidth, imgHeight, 'F'); 
+                }
+                
+                const lineY = imgMargin + imgHeight + lineGap;
+                doc.setDrawColor(...cGold); doc.setLineWidth(0.3); doc.line(linePinpoint, lineY, pageWidth - linePinpoint, lineY);
+                
+                const textY = lineY + 10, contentMargin = 12;
+                doc.setFont("times", "bold"); doc.setFontSize(18); doc.setTextColor(...cCharcoal);
+                doc.text(String(item.design).toUpperCase(), contentMargin, textY + 2, { charSpace: 1.2 });
+                
+                doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(...cGrey);
+                let details = item.size + (item.finish ? `  •  ${item.finish}` : "");
+                doc.text(details.toUpperCase(), contentMargin, textY + 9, { charSpace: 0.8 });
+
+                if (item.qty) {
+                    const qtyString = String(item.qty);
+                    doc.setFont("helvetica", "bold"); doc.setFontSize(22);
+                    const qtyWidth = doc.getTextWidth(qtyString);
+                    const absoluteCenter = (pageWidth - contentMargin) - (qtyWidth / 2);
+                    doc.setTextColor(...cCharcoal); doc.text(qtyString, absoluteCenter, textY + 5, { align: "center" });
+                    
+                    const labelText = "BOXES", spacing = 1.5;
+                    doc.setFont("helvetica", "normal"); doc.setFontSize(6); doc.setTextColor(...cGold);
+                    const labelTotalWidth = doc.getTextWidth(labelText) + ((labelText.length - 1) * spacing);
+                    doc.text(labelText, absoluteCenter - (labelTotalWidth / 2), textY + 10, { charSpace: spacing });
+                }
+            }
+            
+            // USE CUSTOM FILENAME
+            doc.save(`${nameValue}.pdf`);
+            
+            statusMsg.innerText = "Export Done!";
+            generateBtn.disabled = false;
+        }
+    </script>
+</body>
+</html>
