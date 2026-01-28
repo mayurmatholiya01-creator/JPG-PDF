@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>StockPro Studio - Strict Mode</title>
+    <title>StockPro Studio - Folder Locked Mode</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
     <style>
-        /* BASE UI - CLEAN & PRO */
+        /* BASE UI */
         body { background: #E8E8ED; color: #1D1D1F; font-family: 'Inter', sans-serif; height: 100vh; overflow: hidden; }
         .layout { display: grid; grid-template-columns: 320px 1fr; height: 100%; }
         
@@ -33,8 +33,6 @@
         .drop-zone:hover { border-color: #0071E3; background: #F0F8FF; }
         .drop-zone.active { border-color: #0071E3; border-style: solid; background: #E8F2FF; }
         
-        h1 { font-family: 'Playfair Display', serif; letter-spacing: -0.5px; }
-
         .btn-primary { 
             background: #1D1D1F; color: #FFF; border: none; padding: 14px; 
             border-radius: 8px; font-size: 13px; font-weight: 500; width: 100%; 
@@ -107,12 +105,12 @@
     <div class="layout">
         <div class="sidebar">
             <div>
-                <h1 class="text-2xl text-black">StockPro <span class="text-stone-400 text-lg">Studio</span></h1>
-                <p class="text-[11px] text-gray-500 mt-1">STRICT EDITION</p>
+                <h1 class="text-2xl text-black font-serif">StockPro <span class="text-stone-400 text-lg">Studio</span></h1>
+                <p class="text-[11px] text-gray-500 mt-1">FOLDER LOCK EDITION</p>
             </div>
             
             <div class="drop-zone" id="folderZone" onclick="document.getElementById('folderInput').click()">
-                <span class="text-[11px] font-semibold text-gray-600 tracking-wide" id="folderText">1. SELECT IMAGES FOLDER</span>
+                <span class="text-[11px] font-semibold text-gray-600 tracking-wide" id="folderText">1. SELECT ROOT FOLDER</span>
                 <input type="file" id="folderInput" webkitdirectory directory multiple class="hidden">
             </div>
 
@@ -141,7 +139,7 @@
 
         <div class="main" id="mainContainer">
             <div class="text-center text-gray-400 text-sm mt-40">
-                <p>System loaded with Strict Rules.</p>
+                <p>System loaded with Folder-Locked Rules.</p>
                 <p class="text-xs mt-2">Upload Excel & Images to begin.</p>
             </div>
         </div>
@@ -150,20 +148,28 @@
     <input type="file" id="manualImgInput" accept="image/*" class="hidden">
 
     <script>
-        // --- 1. CONFIGURATION: ACTIVE SIZES ---
-        // Yahan wo sizes likhein jinki JSON file aapne GitHub/Repo mein dali hai
-        const ACTIVE_SIZES = [
-            "800x3000", 
-            "800x3200", 
-            "1000x3000", 
-            "800x2400",
-            "1200x1800"
-            // Add more sizes here as you create new JSON files
+        // --- 1. CONFIGURATION: MAP JSON FILES TO FOLDERS ---
+        // Left: JSON File Name, Right: Target Folder Name on PC
+        const MAPPED_CONFIG = [
+            { json: "rules_800x2400x15.json",  folder: "800X2400X15MM" },
+            { json: "rules_800x3000x15.json",  folder: "800X3000X15MM" },
+            { json: "rules_800x3200x12.json",  folder: "800X3200X12MM" },
+            { json: "rules_1000x3000x5.json",  folder: "1000X3000X5MM" },
+            { json: "rules_1200x1200x9.json",  folder: "1200X1200X9MM" },
+            { json: "rules_1200x1800x9.json",  folder: "1200X1800X9MM" },
+            { json: "rules_1200x2400x9.json",  folder: "1200X2400X9MM" },
+            { json: "rules_1200x2800x6.json",  folder: "1200X2800X6MM" },
+            { json: "rules_1200x3200x12.json", folder: "1200X3200X12MM" },
+            { json: "rules_1200x3200x15.json", folder: "1200X3200X15MM" },
+            { json: "rules_1600x1600x9.json",  folder: "1600x1600X9MM" },
+            { json: "rules_1600x3200x6.json",  folder: "1600X3200X6MM" },
+            { json: "rules_1600x3200x12.json", folder: "1600X3200X12MM" },
+            { json: "rules_1600x3200x20.json", folder: "1600X3200X20MM" }
         ];
 
         let imageStore = []; 
         let finalData = [];
-        let masterRules = {};
+        let masterRules = {}; // Will store: { key: { img: "name.jpg", targetFolder: "cleaned_folder_name" } }
         let activeEditIndex = -1;
         let isMissingFilterOn = false;
 
@@ -175,49 +181,69 @@
         const mainContainer = document.getElementById('mainContainer');
         const pdfNameInput = document.getElementById('pdfNameInput');
 
-        // --- 2. AUTO-LOAD RULES (FROM SAME REPO) ---
+        // --- 2. AUTO-LOAD RULES ---
         window.addEventListener('DOMContentLoaded', async () => {
-            console.log("Loading rules...");
-            const promises = ACTIVE_SIZES.map(size => 
-                fetch(`./rules_${size}.json`) // Looks for file in same folder
+            console.log("Loading mapped rules from repo...");
+            
+            const promises = MAPPED_CONFIG.map(config => 
+                fetch(`./${config.json}`) // Assumes JSON files are in the same directory
                     .then(res => {
                         if(res.ok) return res.json();
                         return [];
                     })
-                    .catch(err => [])
+                    .then(data => ({ data, folder: config.folder })) // Pass folder info along
+                    .catch(err => ({ data: [], folder: "" }))
             );
 
             const allResults = await Promise.all(promises);
-            allResults.forEach(fileData => {
-                if(fileData && Array.isArray(fileData)) {
-                    fileData.forEach(rule => { masterRules[rule.key] = rule.expectedImage; });
+            
+            let ruleCount = 0;
+            allResults.forEach(result => {
+                if(result.data && Array.isArray(result.data)) {
+                    // Normalize the target folder name once for efficient matching later
+                    const cleanTargetFolder = result.folder.toLowerCase().replace(/[^a-z0-9]/g, '');
+                    
+                    result.data.forEach(rule => { 
+                        // Store both expected image AND strict folder requirement
+                        masterRules[rule.key] = { 
+                            img: rule.expectedImage, 
+                            targetFolder: cleanTargetFolder 
+                        }; 
+                        ruleCount++;
+                    });
                 }
             });
 
-            console.log(`Loaded ${Object.keys(masterRules).length} rules.`);
-            statusMsg.innerText = "Rules Loaded ✅";
+            console.log(`Loaded ${ruleCount} strict rules.`);
+            statusMsg.innerText = "Rules Ready ✅";
         });
 
-        // --- 3. IMAGE INDEXING ---
+        // --- 3. IMAGE INDEXING (PRESERVE FOLDER INFO) ---
         folderInput.addEventListener('change', (e) => {
             const files = e.target.files;
             if (files.length === 0) return;
-            statusMsg.innerText = "Indexing...";
+            statusMsg.innerText = "Indexing Images...";
             document.getElementById('folderZone').classList.add('active');
             
             setTimeout(() => {
                 imageStore = [];
                 for (let file of files) {
                     if (file.name.match(/\.(jpg|jpeg|png|webp)$/i)) {
+                        // Extract parent folder name
+                        let pathParts = file.webkitRelativePath.split('/');
+                        let folderName = pathParts.length > 1 ? pathParts[pathParts.length - 2] : "root";
+                        
                         imageStore.push({
                             name: file.name,
                             cleanName: file.name.toLowerCase().replace(/[^a-z0-9]/g, ''),
+                            folder: folderName, // Original Folder Name
+                            cleanFolder: folderName.toLowerCase().replace(/[^a-z0-9]/g, ''), // Normalized for matching
                             file: file
                         });
                     }
                 }
                 document.getElementById('folderText').innerText = `Images (${imageStore.length})`;
-                if(finalData.length > 0) runStrictMatcher();
+                if(finalData.length > 0) runFolderLockedMatcher();
                 statusMsg.innerText = "Images Ready";
             }, 100);
         });
@@ -266,15 +292,15 @@
                     });
                 }
                 document.getElementById('excelText').innerText = `Data (${finalData.length})`;
-                runStrictMatcher();
+                runFolderLockedMatcher();
             };
             reader.readAsArrayBuffer(file);
         });
 
-        // --- 5. STRICT MATCHER (NO GUESSWORK) ---
-        function runStrictMatcher() {
+        // --- 5. FOLDER LOCKED MATCHER ---
+        function runFolderLockedMatcher() {
             if (finalData.length === 0) return;
-            statusMsg.innerText = "Matching...";
+            statusMsg.innerText = "Matching with Folder Locks...";
             mainContainer.innerHTML = "";
 
             if (imageStore.length > 0) {
@@ -283,17 +309,31 @@
 
                     let bestMatch = null;
                     
-                    // 1. Try Strict Rule from JSON
+                    // 1. Generate Key (Design | Size)
                     let strictKey = `${item.cleanDesign}|${item.cleanSize}`;
+                    
+                    // 2. Check Rules
                     if (masterRules[strictKey]) {
-                        let targetName = masterRules[strictKey];
-                        // Find that exact file in memory
-                        bestMatch = imageStore.find(img => img.name === targetName || img.cleanName === targetName.toLowerCase().replace(/[^a-z0-9]/g, ''));
+                        let rule = masterRules[strictKey];
+                        let targetName = rule.img;           // E.g., "design.jpg"
+                        let reqFolder = rule.targetFolder;   // E.g., "800x2400x15mm"
+
+                        // 3. Find File with Correct Name AND Correct Folder
+                        bestMatch = imageStore.find(img => {
+                            // Name Match Check
+                            let isNameMatch = (img.name === targetName || img.cleanName === targetName.toLowerCase().replace(/[^a-z0-9]/g, ''));
+                            
+                            // Folder Match Check (Strict)
+                            let isFolderMatch = (img.cleanFolder === reqFolder);
+                            
+                            return isNameMatch && isFolderMatch;
+                        });
                     }
 
-                    // 2. Fallback: Exact Name Match only (No fuzzy, no cross folder)
-                    if (!bestMatch) {
-                        bestMatch = imageStore.find(img => img.cleanName === item.cleanDesign + "jpg");
+                    // 4. Fallback: Exact Name Match (Only if rule not found)
+                    if (!bestMatch && !masterRules[strictKey]) {
+                         // Only fallback if no strict rule exists. If strict rule exists but file missing, leave empty.
+                         bestMatch = imageStore.find(img => img.cleanName === item.cleanDesign + "jpg");
                     }
 
                     if(bestMatch) item.matchedFile = bestMatch.file;
@@ -327,7 +367,7 @@
                 imgHtml = `<img src="${url}" class="preview-img">`;
             } else {
                 imgHtml = `<div style="height:200px; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#999; pointer-events:none;">
-                            <span style="font-size:10px;">NO IMAGE FOUND</span>
+                            <span style="font-size:10px;">NO IMAGE IN FOLDER</span>
                            </div>`;
                 warningHtml = `<div class="warning-badge" id="warn-${index}">MISSING</div>`;
             }
